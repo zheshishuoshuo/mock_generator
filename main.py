@@ -31,7 +31,7 @@ def main() -> None:
         logM_sps_obs,
         nsteps=nsteps,
         nwalkers=20,
-        initial_guess=np.array([12.6, 0.2]),
+        initial_guess=np.array([12.6]),
         backend_file="chains_bless_new_test_aaa.h5",
         parallel=True,
         nproc=mp.cpu_count() - 3,
@@ -43,7 +43,7 @@ def main() -> None:
 
     # 转为 DataFrame 并加上列名
     # param_names = ["param1", "param2", "param3", "param4", "param5"]  # 你可以改成实际参数名
-    param_names = [r"$\mu_{DM}$", r"$\alpha$"]
+    param_names = [r"$\mu_{DM}$"]
 
     df_samples = pd.DataFrame(samples, columns=param_names)
 
@@ -57,7 +57,7 @@ def main() -> None:
     # )
 
     # 真值
-    true_values = [12.91, 0.1]
+    true_values = [12.91]
 
     # 绘制 pairplot
     g = sns.pairplot(

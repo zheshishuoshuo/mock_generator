@@ -32,6 +32,9 @@ MODEL_P = MODEL_PARAMS["deVauc"]
 BETA_DM = MODEL_P["beta_h"]
 SIGMA_DM = MODEL_P["sigma_h"]
 
+# Fixed offset between true and SPS stellar masses used during inference
+ALPHA_FIXED = 0.4
+
 # Source magnitude prior parameters
 ALPHA_S = -1.3
 M_S_STAR = 24.5
@@ -86,10 +89,10 @@ def precompute_grids(
 
 
 def log_prior(theta: Sequence[float]) -> float:
-    """Flat priors for ``(muDM, alpha)``."""
+    """Flat prior on ``muDM`` with fixed ``alpha``."""
 
-    muDM, alpha = theta
-    if not (10.0 < muDM < 16.0 and -0.5 < alpha < 1.0):
+    muDM = float(theta[0])
+    if not (10.0 < muDM < 16.0):
         return -np.inf
     return 0.0
 
@@ -97,11 +100,9 @@ def log_prior(theta: Sequence[float]) -> float:
 def _single_lens_likelihood(
     grid: LensGrid,
     logM_sps_obs: float,
-    theta: Sequence[float],
+    muDM: float,
 ) -> float:
     """Evaluate the integral for one lens on the supplied grids."""
-
-    muDM, alpha = theta
 
     # Extract arrays and mask invalid entries
     mask = (
@@ -146,7 +147,7 @@ def _single_lens_likelihood(
     # Halo–mass relation conditioned on the SPS-based stellar mass
     p_logMh = norm.pdf(
         logMh,
-        loc=muDM + BETA_DM * ((logM_star - alpha) - 11.4),
+        loc=muDM + BETA_DM * ((logM_star - ALPHA_FIXED) - 11.4),
         scale=SIGMA_DM,
     )
 
@@ -155,7 +156,7 @@ def _single_lens_likelihood(
     # Stellar-mass likelihood with measurement scatter on log stellar mass
     p_Mstar = norm.pdf(
         logM_sps_obs,
-        loc=logM_star - alpha,
+        loc=logM_star - ALPHA_FIXED,
         scale=scatter_Mstar,
     )
 
@@ -166,14 +167,14 @@ def _single_lens_likelihood(
 
     # ==== skew-normal prior on SPS mass ====
     p_Msps_prior = skewnorm.pdf(
-        logM_star - alpha,
+        logM_star - ALPHA_FIXED,
         a=a,
         loc=loc,
         scale=scale,
     )
 
     # Size likelihood using the same relation as in the mock generator
-    mu_Re = MODEL_P["mu_R0"] + MODEL_P["beta_R"] * ((logM_star - alpha) - 11.4)
+    mu_Re = MODEL_P["mu_R0"] + MODEL_P["beta_R"] * ((logM_star - ALPHA_FIXED) - 11.4)
     p_logRe = norm.pdf(grid.logRe, loc=mu_Re, scale=MODEL_P["sigma_R"])
 
     Z = p_Msps_prior * p_Mstar * p_logRe * p_logMh * const
@@ -190,10 +191,10 @@ def log_likelihood(
 ) -> float:
     """Compute the joint log-likelihood for all lenses."""
 
-    muDM, alpha = theta
+    muDM = float(theta[0])
 
     try:
-        A_eta = cached_A_interp(muDM, alpha)
+        A_eta = cached_A_interp(muDM, ALPHA_FIXED)
         if not np.isfinite(A_eta) or A_eta <= 0:
             return -np.inf
     except Exception:
@@ -203,7 +204,7 @@ def log_likelihood(
 
     logL = 0.0
     for grid, logM_obs in zip(grids, logM_sps_obs):
-        L_i = _single_lens_likelihood(grid, float(logM_obs), theta)
+        L_i = _single_lens_likelihood(grid, float(logM_obs), muDM)
         if not np.isfinite(L_i) or L_i <= 0:
             return -np.inf
         logL += np.log(L_i / A_eta)
